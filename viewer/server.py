@@ -174,6 +174,22 @@ def get_thread(thread_ts: str):
            ORDER BY ts ASC""",
         (thread_ts,),
     ).fetchall()
+
+    # Fallback: thread_ts로 못 찾으면 ts로 메시지를 찾아 실제 thread_ts를 사용
+    if not rows:
+        pivot = conn.execute(
+            "SELECT * FROM messages WHERE ts=?", (thread_ts,)
+        ).fetchone()
+        if pivot:
+            actual_ts = pivot["thread_ts"] or thread_ts
+            if actual_ts != thread_ts:
+                rows = conn.execute(
+                    "SELECT * FROM messages WHERE thread_ts=? ORDER BY ts ASC",
+                    (actual_ts,),
+                ).fetchall()
+            if not rows:
+                rows = [pivot]  # 최소한 해당 메시지 단독 표시
+
     conn.close()
 
     if not rows:

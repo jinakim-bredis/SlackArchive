@@ -17,6 +17,10 @@ const state = {
   searchTotalPages: 1,
 };
 
+// ── Nav history ───────────────────────────────────────────────────────────────
+const navHistory = [];  // [{ channelId, threadTs, scrollTs }, ...]
+let navHistoryIdx = -1;  // navHistory 내 현재 위치
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
@@ -35,6 +39,8 @@ const el = {
   searchResultsTitle:$("search-results-title"),
   searchCloseBtn:    $("search-close-btn"),
   searchPagination:  $("search-pagination"),
+  navBackBtn:        $("nav-back-btn"),
+  navFwdBtn:         $("nav-fwd-btn"),
 };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -56,6 +62,27 @@ async function init() {
 
     state.users = usersData;
     renderSidebar(channelsData);
+
+    // Restore navigation state from URL hash (bookmark / page reload)
+    const navFromHash = parseNavHash();
+    // 초기 상태를 navHistory에 등록
+    navHistory.push(navFromHash);
+    navHistoryIdx = 0;
+    history.replaceState({ ...navFromHash, _nidx: 0 }, "", location.hash);
+
+    if (navFromHash.searchQuery) {
+      // URL 해시에 검색 쿼리가 있으면 검색 오버레이 복원
+      el.searchInput.value = navFromHash.searchQuery;
+      const parsed = parseSearchQuery(navFromHash.searchQuery);
+      renderFilterChips(parsed);
+      if (hasSearchCriteria(parsed)) doSearch(parsed, 1);
+    } else if (navFromHash.channelId && state.channels[navFromHash.channelId]) {
+      selectChannel(navFromHash.channelId, { pushHistory: false });
+      if (navFromHash.threadTs) {
+        openThread(navFromHash.threadTs, navFromHash.scrollTs || null, { pushHistory: false });
+      }
+    }
+    updateNavButtons();
   } catch (e) {
     el.msgsPlaceholder.innerHTML = `<p>서버에 연결할 수 없습니다: ${e.message}</p>`;
   }
@@ -87,7 +114,7 @@ function renderSidebar(grouped) {
   }
 }
 
-function selectChannel(channelId) {
+function selectChannel(channelId, { pushHistory = true } = {}) {
   if (state.activeChannelId === channelId) return;
 
   // Update sidebar active state
@@ -101,7 +128,7 @@ function selectChannel(channelId) {
   el.msgsList.innerHTML = "";
   el.msgsPlaceholder.classList.add("hidden");
   el.loadMoreBtn.classList.add("hidden");
-  closeThread();
+  closeThread({ pushHistory: false });
   closeSearch();
 
   const ch = state.channels[channelId];
@@ -109,6 +136,7 @@ function selectChannel(channelId) {
   el.channelTitle.textContent = `${icon} ${ch?.name || channelId}`;
   el.channelMeta.textContent = "";
 
+  if (pushHistory) pushNavState(channelId);
   loadMessages(channelId, 1);
 }
 
@@ -317,17 +345,37 @@ async function loadOlderMessages(channelId, page) {
 
 // ── Thread Panel ──────────────────────────────────────────────────────────────
 // scrollToTs: 스레드 내에서 이 ts를 가진 메시지로 스크롤 (최근 댓글 보기 용도)
-async function openThread(threadTs, scrollToTs = null) {
+async function openThread(threadTs, scrollToTs = null, { pushHistory = true } = {}) {
+  if (pushHistory) pushNavState(state.activeChannelId, threadTs, scrollToTs);
   el.threadPanel.classList.remove("hidden");
   el.threadMessages.innerHTML = '<div class="loading">로딩 중...</div>';
 
   try {
-    const data = await fetch(`/api/threads/${encodeURIComponent(threadTs)}`).then((r) => r.json());
+    const res = await fetch(`/api/threads/${encodeURIComponent(threadTs)}`);
+    const data = await res.json();
     el.threadMessages.innerHTML = "";
+
+    if (!res.ok) {
+      el.threadMessages.innerHTML = '<div class="loading">스레드를 찾을 수 없습니다.</div>';
+      return;
+    }
 
     if (!data.messages || data.messages.length === 0) {
       el.threadMessages.innerHTML = '<div class="loading">메시지가 없습니다.</div>';
       return;
+    }
+
+    // 채널 헤더
+    const channelId = data.messages[0]?.channel_id;
+    const ch = channelId ? state.channels[channelId] : null;
+    if (ch) {
+      const header = document.createElement("div");
+      header.className = "thread-ch-header";
+      header.innerHTML =
+        `<span class="thread-ch-label">채널</span>` +
+        `<button class="thread-ch-btn" data-channel-id="${escapeAttr(ch.id)}">` +
+        `${typeIcon(ch.type)} ${escapeHtml(ch.name)}</button>`;
+      el.threadMessages.appendChild(header);
     }
 
     const [root, ...replies] = data.messages;
@@ -374,12 +422,13 @@ async function openThread(threadTs, scrollToTs = null) {
   }
 }
 
-function closeThread() {
+function closeThread({ pushHistory = true } = {}) {
   el.threadPanel.classList.add("hidden");
   el.threadMessages.innerHTML = "";
+  if (pushHistory && state.activeChannelId) pushNavState(state.activeChannelId);
 }
 
-el.threadCloseBtn.addEventListener("click", closeThread);
+el.threadCloseBtn.addEventListener("click", () => closeThread());
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
@@ -499,6 +548,7 @@ async function updateAutocomplete(inputValue) {
         closeAutocomplete();
         el.searchInput.focus();
         renderFilterChips(parseSearchQuery(el.searchInput.value));
+        triggerSearch();
       });
     } else {
       const display = item.display_name || item.real_name || item.name;
@@ -510,6 +560,7 @@ async function updateAutocomplete(inputValue) {
         closeAutocomplete();
         el.searchInput.focus();
         renderFilterChips(parseSearchQuery(el.searchInput.value));
+        triggerSearch();
       });
     }
     acDropdown.appendChild(div);
@@ -639,11 +690,18 @@ function makeSearchResultRow(msg) {
     </div>
   `;
   wrap.addEventListener("click", () => {
+    const savedQuery = el.searchInput.value;  // 닫기 전에 쿼리 저장
+
+    // 검색 상태를 navHistory에 먼저 push → 뒤로 가기 시 검색 화면 복원
+    if (savedQuery) pushNavState(state.activeChannelId, null, null, savedQuery);
+
     closeSearch();
     el.searchInput.value = "";
     filterChipsEl.innerHTML = "";
-    // Open thread panel directly at this message (don't navigate to channel)
     const threadTs = msg.thread_ts || msg.ts;
+    if (msg.channel_id && msg.channel_id !== state.activeChannelId) {
+      selectChannel(msg.channel_id, { pushHistory: false });
+    }
     openThread(threadTs, msg.ts);
   });
   return wrap;
@@ -741,13 +799,14 @@ function renderSlackMarkup(text) {
       if (archiveMatch) {
         const [, cid, sec, usec] = archiveMatch;
         const msgTs = `${sec}.${usec}`;
-        const threadTsParam = href.match(/[?&]thread_ts=([\d.]+)/);
+        const threadTsParam = href.match(/[?&]thread_?ts=([\d.]+)/);
         const threadTs = threadTsParam ? threadTsParam[1] : msgTs;
         if (state.channels[cid]) {
           return `<a href="#" class="local-msg-link"` +
+            ` data-channel-id="${escapeAttr(cid)}"` +
             ` data-thread-ts="${escapeAttr(threadTs)}"` +
             ` data-scroll-ts="${escapeAttr(msgTs)}"` +
-            ` title="아카이브에서 보기">${display}</a>`;
+            ` title="아카이브에서 보기 (Ctrl+클릭: 새 탭)">${display}</a>`;
         }
       }
 
@@ -800,6 +859,72 @@ function escapeAttr(str) {
   return String(str || "").replace(/"/g, "&quot;");
 }
 
+// ── History / Navigation ──────────────────────────────────────────────────────
+function parseNavHash() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  return {
+    channelId:   params.get("channel") || null,
+    threadTs:    params.get("thread")  || null,
+    scrollTs:    params.get("scroll")  || null,
+    searchQuery: params.get("search")  || null,
+  };
+}
+
+function pushNavState(channelId, threadTs = null, scrollTs = null, searchQuery = null) {
+  // 현재 위치 이후의 앞으로 항목 제거 (새 경로로 분기)
+  navHistory.splice(navHistoryIdx + 1);
+  navHistory.push({ channelId, threadTs, scrollTs, searchQuery });
+  navHistoryIdx = navHistory.length - 1;
+
+  const params = new URLSearchParams();
+  if (channelId)   params.set("channel", channelId);
+  if (threadTs)    params.set("thread",  threadTs);
+  if (scrollTs)    params.set("scroll",  scrollTs);
+  if (searchQuery) params.set("search",  searchQuery);
+  history.pushState(
+    { channelId, threadTs, scrollTs, searchQuery, _nidx: navHistoryIdx },
+    "",
+    "#" + params.toString()
+  );
+  updateNavButtons();
+}
+
+function updateNavButtons() {
+  el.navBackBtn.disabled = navHistoryIdx <= 0;
+  el.navFwdBtn.disabled  = navHistoryIdx >= navHistory.length - 1;
+}
+
+function restoreNavState(navState) {
+  const { channelId, threadTs, scrollTs, searchQuery } = navState || parseNavHash();
+
+  // 검색 상태 복원: 오버레이를 다시 열고 검색 재실행
+  if (searchQuery) {
+    el.searchInput.value = searchQuery;
+    const parsed = parseSearchQuery(searchQuery);
+    renderFilterChips(parsed);
+    if (hasSearchCriteria(parsed)) doSearch(parsed, 1);
+    closeThread({ pushHistory: false });
+    return;
+  }
+
+  if (!channelId || !state.channels[channelId]) return;
+  if (channelId !== state.activeChannelId) {
+    selectChannel(channelId, { pushHistory: false });
+  } else if (!threadTs) {
+    closeThread({ pushHistory: false });
+  }
+  if (threadTs) {
+    openThread(threadTs, scrollTs || null, { pushHistory: false });
+  }
+}
+
+window.addEventListener("popstate", (e) => {
+  const st = e.state;
+  if (st && typeof st._nidx === "number") navHistoryIdx = st._nidx;
+  restoreNavState(st?.channelId ? st : parseNavHash());
+  updateNavButtons();
+});
+
 // ── Sort buttons ──────────────────────────────────────────────────────────────
 document.querySelectorAll(".sort-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -811,6 +936,26 @@ document.querySelectorAll(".sort-btn").forEach((btn) => {
   });
 });
 
+// ── Nav button handlers ───────────────────────────────────────────────────────
+el.navBackBtn.addEventListener("click", () => {
+  if (navHistoryIdx > 0) history.back();
+});
+el.navFwdBtn.addEventListener("click", () => {
+  if (navHistoryIdx < navHistory.length - 1) history.forward();
+});
+
+// Alt+← = 뒤로, Alt+→ = 앞으로
+document.addEventListener("keydown", (e) => {
+  if (e.altKey && e.key === "ArrowLeft"  && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (navHistoryIdx > 0) history.back();
+  }
+  if (e.altKey && e.key === "ArrowRight" && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (navHistoryIdx < navHistory.length - 1) history.forward();
+  }
+});
+
 // ── Local Slack archive link handler ─────────────────────────────────────────
 document.addEventListener("click", (e) => {
   const link = e.target.closest(".local-msg-link");
@@ -818,11 +963,62 @@ document.addEventListener("click", (e) => {
   e.preventDefault();
   const threadTs = link.dataset.threadTs;
   const scrollTs = link.dataset.scrollTs;
-  if (threadTs) {
-    closeSearch();
-    openThread(threadTs, scrollTs || threadTs);
+  if (!threadTs) return;
+
+  // Ctrl/Cmd+클릭 → 현재 URL에 해시 파라미터를 붙여 새 탭으로 열기
+  if (e.ctrlKey || e.metaKey) {
+    const params = new URLSearchParams();
+    if (link.dataset.channelId) params.set("channel", link.dataset.channelId);
+    if (threadTs)  params.set("thread", threadTs);
+    if (scrollTs)  params.set("scroll", scrollTs);
+    window.open(location.pathname + "#" + params.toString(), "_blank");
+    return;
   }
+
+  closeSearch();
+  openThread(threadTs, scrollTs || threadTs);
 });
+
+// ── Thread panel channel header button ────────────────────────────────────────
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".thread-ch-btn");
+  if (!btn) return;
+  selectChannel(btn.dataset.channelId);
+});
+
+// ── Thread panel resize ───────────────────────────────────────────────────────
+(function () {
+  const handle = document.getElementById("thread-resize-handle");
+  const panel  = document.getElementById("thread-panel");
+
+  // 저장된 너비 복원
+  const saved = localStorage.getItem("threadPanelWidth");
+  if (saved) panel.style.width = saved + "px";
+
+  let startX, startWidth;
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    startX     = e.clientX;
+    startWidth = panel.offsetWidth;
+    handle.classList.add("dragging");
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  });
+
+  function onMove(e) {
+    // 핸들이 왼쪽 경계 → 왼쪽으로 드래그할수록 너비 증가
+    const newWidth = Math.max(280, Math.min(700, startWidth + (startX - e.clientX)));
+    panel.style.width = newWidth + "px";
+  }
+
+  function onUp() {
+    handle.classList.remove("dragging");
+    localStorage.setItem("threadPanelWidth", panel.offsetWidth);
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup",   onUp);
+  }
+})();
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 init();

@@ -43,6 +43,10 @@
     <!-- ── 메시지 타임라인 ──────────────────────────────── -->
     <main id="main-panel">
       <div id="main-header">
+        <div id="nav-buttons">
+          <button id="nav-back-btn" title="뒤로 (Alt+←)" disabled>‹</button>
+          <button id="nav-fwd-btn"  title="앞으로 (Alt+→)" disabled>›</button>
+        </div>
         <span id="channel-title">채널을 선택하세요</span>
         <span id="channel-meta"></span>
       </div>
@@ -60,6 +64,7 @@
 
     <!-- ── 스레드 패널 ──────────────────────────────────── -->
     <aside id="thread-panel" class="hidden">
+      <div id="thread-resize-handle" title="드래그하여 너비 조절"></div>
       <div id="thread-header">
         <span>스레드</span>
         <button id="thread-close-btn" title="닫기">✕</button>

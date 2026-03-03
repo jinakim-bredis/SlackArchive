@@ -414,8 +414,23 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); font
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 #thread-panel.hidden { display: none; }
+
+#thread-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+#thread-resize-handle:hover { background: rgba(17, 100, 163, 0.25); }
+#thread-resize-handle.dragging { background: rgba(17, 100, 163, 0.4); }
 
 #thread-header {
   display: flex;
@@ -457,6 +472,27 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); font
   font-weight: 700;
   color: var(--text-secondary);
 }
+
+.thread-ch-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.thread-ch-label { font-weight: 600; }
+.thread-ch-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--link-color);
+  font-size: 13px;
+}
+.thread-ch-btn:hover { background: var(--msg-hover); }
 
 /* ── Search Overlay ────────────────────────────────────────────── */
 #search-overlay {
@@ -618,6 +654,31 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); font
 .sr-date { font-size: 12px; color: var(--text-muted); margin-left: auto; }
 .sr-body { display: flex; gap: 10px; align-items: flex-start; }
 .sr-content { flex: 1; min-width: 0; }
+
+/* ── Nav Buttons ───────────────────────────────────────────────── */
+#nav-buttons {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+#nav-back-btn, #nav-fwd-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.1s, color 0.1s;
+}
+#nav-back-btn:hover:not(:disabled),
+#nav-fwd-btn:hover:not(:disabled) {
+  background: var(--msg-hover);
+  color: var(--text-primary);
+}
+#nav-back-btn:disabled,
+#nav-fwd-btn:disabled { opacity: 0.3; cursor: default; }
 
 /* ── Utility ───────────────────────────────────────────────────── */
 .hidden { display: none !important; }
