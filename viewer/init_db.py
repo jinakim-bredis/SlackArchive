@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp_str TEXT,
     reply_count   INTEGER DEFAULT 0,
     reactions     TEXT,
-    files         TEXT
+    files         TEXT,
+    is_broadcast  INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, ts);
@@ -236,6 +237,7 @@ def ingest_messages(
                 user_name = user_map.get(uid, uid)
 
                 reply_count = msg.get("reply_count", 0)
+                is_broadcast = 1 if subtype == "thread_broadcast" else 0
 
                 batch.append((
                     ts,
@@ -249,11 +251,12 @@ def ingest_messages(
                     reply_count,
                     parse_reactions(msg),
                     parse_files(msg),
+                    is_broadcast,
                 ))
 
         if batch:
             conn.executemany(
-                "INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 batch,
             )
             total += len(batch)
@@ -269,25 +272,32 @@ def build_fts(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: python init_db.py <slack_export.zip>")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="slack_export.zip → SQLite")
+    parser.add_argument("zip_path", help="Path to slack export ZIP file")
+    parser.add_argument(
+        "--merge", action="store_true",
+        help="Merge into existing DB (skip drop; upsert only). Use for incremental ZIPs."
+    )
+    args = parser.parse_args()
 
-    zip_path = sys.argv[1]
+    zip_path = args.zip_path
     if not os.path.exists(zip_path):
         print(f"Error: file not found: {zip_path}")
         sys.exit(1)
 
     print(f"Opening: {zip_path}")
     print(f"Database: {DB_PATH}")
+    print(f"Mode: {'merge (incremental)' if args.merge else 'full rebuild'}")
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-65536")  # 64 MB page cache
 
-    print("Dropping existing tables...")
-    drop_tables(conn)
+    if not args.merge:
+        print("Dropping existing tables...")
+        drop_tables(conn)
     conn.executescript(SCHEMA)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
