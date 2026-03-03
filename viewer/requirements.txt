@@ -1,2 +1,4 @@
 fastapi==0.115.6
 uvicorn==0.34.0
+pystray>=0.19
+Pillow>=10.0
