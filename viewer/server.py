@@ -83,14 +83,25 @@ def status():
 def get_channels():
     require_db()
     conn = get_conn()
+    # DM/그룹DM: 가장 최근 메시지 ts 기준 내림차순, 나머지: 이름 오름차순
     rows = conn.execute(
-        "SELECT id, name, type, archived, topic, purpose FROM channels ORDER BY type, name"
+        """
+        SELECT c.id, c.name, c.type, c.archived, c.topic, c.purpose,
+               MAX(m.ts) AS last_ts
+        FROM channels c
+        LEFT JOIN messages m ON m.channel_id = c.id
+        GROUP BY c.id
+        ORDER BY c.type,
+                 CASE WHEN c.type IN ('dm','group_dm') THEN CAST(MAX(m.ts) AS REAL) END DESC,
+                 CASE WHEN c.type NOT IN ('dm','group_dm') THEN c.name END ASC
+        """
     ).fetchall()
     conn.close()
 
     grouped = {"public": [], "private": [], "group_dm": [], "dm": []}
     for r in rows:
         d = dict(r)
+        d.pop("last_ts", None)
         grouped.setdefault(d["type"], []).append(d)
     return grouped
 
