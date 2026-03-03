@@ -158,7 +158,7 @@ def ingest_zip_to_db(zip_path: str, db_path: str, log_fn) -> int:
                 elif ch_type == "group_dm":
                     members = item.get("members", [])
                     display_name = ", ".join(user_map.get(m, m) for m in members if m) or raw_name
-                    folder_name = cid
+                    folder_name = raw_name  # ZIP에서 mpim은 name(mpdm-...)으로 폴더가 생성됨
                 else:
                     display_name = raw_name
                     folder_name = raw_name

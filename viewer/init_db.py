@@ -124,7 +124,7 @@ def ingest_channels(zf: zipfile.ZipFile, conn: sqlite3.Connection, user_map: dic
                 members = item.get("members", [])
                 names = [user_map.get(m, m) for m in members if m]
                 display_name = ", ".join(names) if names else raw_name
-                folder_name = item.get("id", "")
+                folder_name = raw_name  # ZIP에서 mpim은 name(mpdm-...)으로 폴더가 생성됨
             else:
                 display_name = raw_name
                 folder_name = raw_name
