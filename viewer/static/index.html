@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slack Archive Viewer</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── 사이드바 ─────────────────────────────────────── -->
+    <nav id="sidebar">
+      <div id="sidebar-header">
+        <span id="workspace-title">Slack Archive</span>
+      </div>
+
+      <div id="search-wrap">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="메시지 검색..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div id="channel-list">
+        <div class="ch-group-label">채널</div>
+        <ul id="ch-public" class="ch-group"></ul>
+
+        <div class="ch-group-label">비공개 채널</div>
+        <ul id="ch-private" class="ch-group"></ul>
+
+        <div class="ch-group-label">그룹 DM</div>
+        <ul id="ch-group_dm" class="ch-group"></ul>
+
+        <div class="ch-group-label">다이렉트 메시지</div>
+        <ul id="ch-dm" class="ch-group"></ul>
+      </div>
+    </nav>
+
+    <!-- ── 메시지 타임라인 ──────────────────────────────── -->
+    <main id="main-panel">
+      <div id="main-header">
+        <span id="channel-title">채널을 선택하세요</span>
+        <span id="channel-meta"></span>
+      </div>
+
+      <div id="messages-wrap">
+        <div id="load-more-wrap">
+          <button id="load-more-btn" class="hidden">이전 메시지 불러오기</button>
+        </div>
+        <div id="messages-list"></div>
+        <div id="messages-placeholder">
+          <p>왼쪽에서 채널을 선택하거나 검색어를 입력하세요.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── 스레드 패널 ──────────────────────────────────── -->
+    <aside id="thread-panel" class="hidden">
+      <div id="thread-header">
+        <span>스레드</span>
+        <button id="thread-close-btn" title="닫기">✕</button>
+      </div>
+      <div id="thread-messages"></div>
+    </aside>
+
+  </div>
+
+  <!-- ── 검색 결과 오버레이 ─────────────────────────────── -->
+  <div id="search-overlay" class="hidden">
+    <div id="search-results-header">
+      <span id="search-results-title">검색 결과</span>
+      <div id="search-sort-bar">
+        <button class="sort-btn active" data-sort="newest">최신순</button>
+        <button class="sort-btn" data-sort="oldest">오래된순</button>
+        <button class="sort-btn" data-sort="relevant">연관순</button>
+      </div>
+      <button id="search-close-btn" title="닫기">✕</button>
+    </div>
+    <div id="search-results-list"></div>
+    <div id="search-pagination"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

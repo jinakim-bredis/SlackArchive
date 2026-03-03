@@ -1,0 +1,42 @@
+# ── Slack data (contains sensitive conversations — never commit) ──────────────
+backup/
+viewer/slack_archive.db
+
+# ── slackdump binary & output files ──────────────────────────────────────────
+slackdump.exe
+channels-*.txt
+
+# ── Environment variables (tokens, cookies) ───────────────────────────────────
+.env
+*.env
+.env.local
+.env.*.local
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+.next/
+.nuxt/
+.cache/
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+.claude/
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
