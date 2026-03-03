@@ -22,6 +22,11 @@ __pycache__/
 dist/
 build/
 
+# ── PyInstaller (archiver 빌드 산출물) ────────────────────────────────────────
+archiver/dist/
+archiver/build/
+archiver/*.spec
+
 # ── Node.js ───────────────────────────────────────────────────────────────────
 node_modules/
 .next/
